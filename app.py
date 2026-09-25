@@ -10,10 +10,10 @@ def analisar(imagem):
     try:
         resultado = remover_fundo(imagem)
 
-        return resultado, "Segmentação concluída com sucesso!"
+        return resultado, "Segmentação concluída."
 
     except Exception as erro:
-        return None, f"Erro durante a segmentação: {erro}"
+        return None, f"Erro na segmentação: {erro}"
 
 
 with gr.Blocks(title="Solaria3D") as app:
@@ -24,27 +24,31 @@ with gr.Blocks(title="Solaria3D") as app:
 
         **Transformação de imagens 2D em modelos 3D**
 
-        ### Etapa 1 — Separação do objeto
-        Envie uma imagem para remover o fundo.
+        ### Etapa 1 — Segmentação
+        O sistema identifica o objeto e remove o fundo da imagem.
         """
     )
 
-    imagem = gr.Image(
-        type="pil",
-        label="Imagem 2D"
+    with gr.Row():
+
+        imagem = gr.Image(
+            type="pil",
+            label="Imagem 2D"
+        )
+
+        resultado = gr.Image(
+            type="pil",
+            label="Objeto sem fundo"
+        )
+
+    status = gr.Textbox(
+        label="Status",
+        interactive=False
     )
 
     botao = gr.Button(
-        "Analisar imagem"
-    )
-
-    resultado = gr.Image(
-        type="pil",
-        label="Objeto isolado"
-    )
-
-    status = gr.Textbox(
-        label="Status"
+        "1. Segmentar imagem",
+        variant="primary"
     )
 
     botao.click(
