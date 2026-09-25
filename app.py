@@ -1,45 +1,87 @@
 import gradio as gr
 
 from segmentation import remover_fundo
-from depth.test_depth_engine import TestDepthEngine
+from depth.depth_engine import DepthEngine
 from depth.depth_visualizer import depth_to_image
 
 
-# Motor de profundidade de teste
-depth_engine = TestDepthEngine()
+# ============================================================
+# MOTOR DE PROFUNDIDADE
+# ============================================================
 
+depth_engine = DepthEngine()
+
+
+# ============================================================
+# PROCESSAMENTO
+# ============================================================
 
 def processar(imagem):
+
     if imagem is None:
-        return None, None, "Nenhuma imagem enviada."
+
+        return (
+            None,
+            None,
+            "Nenhuma imagem enviada."
+        )
 
     try:
-        # ==========================================
+
+        # ====================================================
         # ETAPA 1 — SEGMENTAÇÃO
-        # ==========================================
-        objeto = remover_fundo(imagem)
+        # ====================================================
+
+        objeto = remover_fundo(
+            imagem
+        )
 
         if objeto is None:
-            return None, None, "Erro na segmentação."
 
-        # ==========================================
+            return (
+                None,
+                None,
+                "Erro na segmentação."
+            )
+
+        # ====================================================
         # ETAPA 2 — PROFUNDIDADE
-        # ==========================================
-        resultado_depth = depth_engine.analisar(objeto)
+        # ====================================================
 
-        mapa_depth = depth_to_image(resultado_depth.depth)
+        resultado_depth = depth_engine.analisar(
+            objeto
+        )
+
+        mapa_depth = depth_to_image(
+            resultado_depth.depth
+        )
+
+        # ====================================================
+        # RESULTADO
+        # ====================================================
 
         return (
             objeto,
             mapa_depth,
-            "Processamento concluído: segmentação + profundidade."
+            "Processamento concluído."
         )
 
     except Exception as erro:
-        return None, None, f"Erro: {erro}"
+
+        return (
+            None,
+            None,
+            f"Erro: {type(erro).__name__}: {erro}"
+        )
 
 
-with gr.Blocks(title="Solaria3D") as app:
+# ============================================================
+# INTERFACE
+# ============================================================
+
+with gr.Blocks(
+    title="Solaria3D"
+) as app:
 
     gr.Markdown(
         """
@@ -49,10 +91,10 @@ with gr.Blocks(title="Solaria3D") as app:
 
         ### Pipeline atual
 
-        **1. Segmentação → 2. Profundidade**
+        **Imagem → Segmentação → Profundidade**
 
-        A profundidade ainda utiliza um motor de teste.
-        Posteriormente será substituído pelo modelo real.
+        O motor de profundidade será desenvolvido
+        pela própria Solaria3D.
         """
     )
 
@@ -94,4 +136,10 @@ with gr.Blocks(title="Solaria3D") as app:
     )
 
 
-app.launch()
+# ============================================================
+# EXECUÇÃO
+# ============================================================
+
+if __name__ == "__main__":
+
+    app.launch()
