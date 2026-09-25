@@ -1,19 +1,42 @@
 import gradio as gr
 
 from segmentation import remover_fundo
+from depth.test_depth_engine import TestDepthEngine
+from depth.depth_visualizer import depth_to_image
 
 
-def analisar(imagem):
+# Motor de profundidade de teste
+depth_engine = TestDepthEngine()
+
+
+def processar(imagem):
     if imagem is None:
-        return None, "Nenhuma imagem enviada."
+        return None, None, "Nenhuma imagem enviada."
 
     try:
-        resultado = remover_fundo(imagem)
+        # ==========================================
+        # ETAPA 1 — SEGMENTAÇÃO
+        # ==========================================
+        objeto = remover_fundo(imagem)
 
-        return resultado, "Segmentação concluída."
+        if objeto is None:
+            return None, None, "Erro na segmentação."
+
+        # ==========================================
+        # ETAPA 2 — PROFUNDIDADE
+        # ==========================================
+        resultado_depth = depth_engine.analisar(objeto)
+
+        mapa_depth = depth_to_image(resultado_depth.depth)
+
+        return (
+            objeto,
+            mapa_depth,
+            "Processamento concluído: segmentação + profundidade."
+        )
 
     except Exception as erro:
-        return None, f"Erro na segmentação: {erro}"
+        return None, None, f"Erro: {erro}"
 
 
 with gr.Blocks(title="Solaria3D") as app:
@@ -24,21 +47,35 @@ with gr.Blocks(title="Solaria3D") as app:
 
         **Transformação de imagens 2D em modelos 3D**
 
-        ### Etapa 1 — Segmentação
-        O sistema identifica o objeto e remove o fundo da imagem.
+        ### Pipeline atual
+
+        **1. Segmentação → 2. Profundidade**
+
+        A profundidade ainda utiliza um motor de teste.
+        Posteriormente será substituído pelo modelo real.
         """
+    )
+
+    imagem = gr.Image(
+        type="pil",
+        label="Imagem 2D"
+    )
+
+    botao = gr.Button(
+        "Processar imagem",
+        variant="primary"
     )
 
     with gr.Row():
 
-        imagem = gr.Image(
+        objeto = gr.Image(
             type="pil",
-            label="Imagem 2D"
+            label="1 — Objeto segmentado"
         )
 
-        resultado = gr.Image(
+        mapa_depth = gr.Image(
             type="pil",
-            label="Objeto sem fundo"
+            label="2 — Mapa de profundidade"
         )
 
     status = gr.Textbox(
@@ -46,15 +83,14 @@ with gr.Blocks(title="Solaria3D") as app:
         interactive=False
     )
 
-    botao = gr.Button(
-        "1. Segmentar imagem",
-        variant="primary"
-    )
-
     botao.click(
-        fn=analisar,
+        fn=processar,
         inputs=imagem,
-        outputs=[resultado, status]
+        outputs=[
+            objeto,
+            mapa_depth,
+            status
+        ]
     )
 
 

@@ -1,14 +1,10 @@
 import numpy as np
 from PIL import Image
 
-from depth_engine import DepthEngine, DepthResult
+from .depth_engine import DepthEngine, DepthResult
 
 
 class TestDepthEngine(DepthEngine):
-    """
-    Motor temporário usado apenas para validar
-    a estrutura do pipeline.
-    """
 
     def analisar(self, imagem) -> DepthResult:
         if imagem is None:
@@ -16,7 +12,8 @@ class TestDepthEngine(DepthEngine):
 
         largura, altura = imagem.size
 
-        # Cria um gradiente artificial de profundidade.
+        # Gera um mapa de profundidade artificial
+        # apenas para testar o pipeline.
         depth = np.linspace(
             0,
             1,
@@ -29,16 +26,17 @@ class TestDepthEngine(DepthEngine):
         )
 
 
-imagem = Image.new("RGB", (256, 256))
+if __name__ == "__main__":
 
-engine = TestDepthEngine()
+    # A imagem está na raiz do projeto.
+    imagem = Image.open("images.webp").convert("RGB")
 
-resultado = engine.analisar(imagem)
+    engine = TestDepthEngine()
 
-print("DepthEngine executado com sucesso")
-print("Formato:", resultado.depth.shape)
-print("Tipo:", resultado.depth.dtype)
-print("Mínimo:", resultado.depth.min())
-print("Máximo:", resultado.depth.max())
-print("Normals:", resultado.normals)
-print("Albedo:", resultado.albedo)
+    resultado = engine.analisar(imagem)
+
+    print("Depth Engine executado com sucesso")
+    print("Formato:", resultado.depth.shape)
+    print("Tipo:", resultado.depth.dtype)
+    print("Mínimo:", resultado.depth.min())
+    print("Máximo:", resultado.depth.max())
