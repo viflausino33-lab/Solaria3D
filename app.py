@@ -1,11 +1,19 @@
 import gradio as gr
 
+from segmentation import remover_fundo
+
 
 def analisar(imagem):
     if imagem is None:
-        return "Nenhuma imagem enviada."
+        return None, "Nenhuma imagem enviada."
 
-    return "Imagem recebida com sucesso."
+    try:
+        resultado = remover_fundo(imagem)
+
+        return resultado, "Segmentação concluída com sucesso!"
+
+    except Exception as erro:
+        return None, f"Erro durante a segmentação: {erro}"
 
 
 with gr.Blocks(title="Solaria3D") as app:
@@ -16,7 +24,8 @@ with gr.Blocks(title="Solaria3D") as app:
 
         **Transformação de imagens 2D em modelos 3D**
 
-        Primeira versão do sistema.
+        ### Etapa 1 — Separação do objeto
+        Envie uma imagem para remover o fundo.
         """
     )
 
@@ -25,18 +34,23 @@ with gr.Blocks(title="Solaria3D") as app:
         label="Imagem 2D"
     )
 
-    resultado = gr.Textbox(
-        label="Status"
-    )
-
     botao = gr.Button(
         "Analisar imagem"
+    )
+
+    resultado = gr.Image(
+        type="pil",
+        label="Objeto isolado"
+    )
+
+    status = gr.Textbox(
+        label="Status"
     )
 
     botao.click(
         fn=analisar,
         inputs=imagem,
-        outputs=resultado
+        outputs=[resultado, status]
     )
 
 
