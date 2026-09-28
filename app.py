@@ -1,15 +1,15 @@
 import gradio as gr
 
 from segmentation import remover_fundo
-from depth.depth_engine import DepthEngine
+from depth.solaria_engine import SolariaDepthEngine
 from depth.depth_visualizer import depth_to_image
 
 
 # ============================================================
-# MOTOR DE PROFUNDIDADE
+# MOTOR DE PROFUNDIDADE — SOLARIADEPTH
 # ============================================================
 
-depth_engine = DepthEngine()
+depth_engine = SolariaDepthEngine()
 
 
 # ============================================================
@@ -32,6 +32,9 @@ def processar(imagem):
         # ETAPA 1 — SEGMENTAÇÃO
         # ====================================================
 
+        print()
+        print("Iniciando segmentação...")
+
         objeto = remover_fundo(
             imagem
         )
@@ -44,17 +47,42 @@ def processar(imagem):
                 "Erro na segmentação."
             )
 
+        print("Segmentação concluída.")
+
         # ====================================================
-        # ETAPA 2 — PROFUNDIDADE
+        # ETAPA 2 — SOLARIADEPTH
         # ====================================================
 
-        resultado_depth = depth_engine.analisar(
+        print("Executando SolariaDepth...")
+
+        depth = depth_engine.analisar(
             objeto
         )
 
-        mapa_depth = depth_to_image(
-            resultado_depth.depth
+        print(
+            "Depth gerado:",
+            depth.shape
         )
+
+        print(
+            "Depth min:",
+            depth.min()
+        )
+
+        print(
+            "Depth max:",
+            depth.max()
+        )
+
+        # ====================================================
+        # ETAPA 3 — VISUALIZAÇÃO
+        # ====================================================
+
+        mapa_depth = depth_to_image(
+            depth
+        )
+
+        print("Mapa de profundidade gerado.")
 
         # ====================================================
         # RESULTADO
@@ -63,10 +91,17 @@ def processar(imagem):
         return (
             objeto,
             mapa_depth,
-            "Processamento concluído."
+            "Processamento concluído com SolariaDepth."
         )
 
     except Exception as erro:
+
+        print()
+        print("ERRO:")
+        print(
+            type(erro).__name__,
+            erro
+        )
 
         return (
             None,
@@ -91,10 +126,10 @@ with gr.Blocks(
 
         ### Pipeline atual
 
-        **Imagem → Segmentação → Profundidade**
+        **Imagem → Segmentação → SolariaDepth**
 
-        O motor de profundidade será desenvolvido
-        pela própria Solaria3D.
+        A profundidade é estimada pela rede neural
+        própria da Solaria3D.
         """
     )
 
