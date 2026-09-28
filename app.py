@@ -1,12 +1,25 @@
+import os
+
 import gradio as gr
 
 from segmentation import remover_fundo
 from depth.solaria_engine import SolariaDepthEngine
 from depth.depth_visualizer import depth_to_image
+from depth.pointcloud import (
+    depth_to_pointcloud,
+    save_pointcloud_ply
+)
 
 
 # ============================================================
-# MOTOR DE PROFUNDIDADE — SOLARIADEPTH
+# CONFIGURAÇÃO
+# ============================================================
+
+MODEL_PATH = "models/solaria_depth_v1.ply"
+
+
+# ============================================================
+# MOTOR DE PROFUNDIDADE
 # ============================================================
 
 depth_engine = SolariaDepthEngine()
@@ -21,6 +34,7 @@ def processar(imagem):
     if imagem is None:
 
         return (
+            None,
             None,
             None,
             "Nenhuma imagem enviada."
@@ -44,45 +58,82 @@ def processar(imagem):
             return (
                 None,
                 None,
+                None,
                 "Erro na segmentação."
             )
 
-        print("Segmentação concluída.")
+        print(
+            "Segmentação concluída."
+        )
+
 
         # ====================================================
-        # ETAPA 2 — SOLARIADEPTH
+        # ETAPA 2 — PROFUNDIDADE
         # ====================================================
 
-        print("Executando SolariaDepth...")
+        print(
+            "Gerando profundidade..."
+        )
 
-        depth = depth_engine.analisar(
+        resultado_depth = depth_engine.analisar(
             objeto
         )
 
         print(
-            "Depth gerado:",
-            depth.shape
+            "Profundidade concluída."
         )
 
-        print(
-            "Depth min:",
-            depth.min()
-        )
-
-        print(
-            "Depth max:",
-            depth.max()
-        )
 
         # ====================================================
-        # ETAPA 3 — VISUALIZAÇÃO
+        # ETAPA 3 — VISUALIZAÇÃO DO DEPTH
         # ====================================================
 
         mapa_depth = depth_to_image(
-            depth
+            resultado_depth
         )
 
-        print("Mapa de profundidade gerado.")
+
+        # ====================================================
+        # ETAPA 4 — NUVEM DE PONTOS
+        # ====================================================
+
+        print(
+            "Gerando nuvem de pontos..."
+        )
+
+        points, colors = depth_to_pointcloud(
+            resultado_depth,
+            image=objeto,
+            mask=objeto,
+            stride=2
+        )
+
+        print(
+            "Pontos gerados:",
+            len(points)
+        )
+
+
+        # ====================================================
+        # ETAPA 5 — SALVAR PLY
+        # ====================================================
+
+        os.makedirs(
+            "models",
+            exist_ok=True
+        )
+
+        save_pointcloud_ply(
+            MODEL_PATH,
+            points,
+            colors
+        )
+
+        print(
+            "Nuvem salva:",
+            MODEL_PATH
+        )
+
 
         # ====================================================
         # RESULTADO
@@ -91,19 +142,25 @@ def processar(imagem):
         return (
             objeto,
             mapa_depth,
-            "Processamento concluído com SolariaDepth."
+            MODEL_PATH,
+            (
+                "Processamento concluído. "
+                f"{len(points):,} pontos 3D gerados."
+            )
         )
+
 
     except Exception as erro:
 
         print()
-        print("ERRO:")
         print(
+            "ERRO:",
             type(erro).__name__,
             erro
         )
 
         return (
+            None,
             None,
             None,
             f"Erro: {type(erro).__name__}: {erro}"
@@ -126,22 +183,33 @@ with gr.Blocks(
 
         ### Pipeline atual
 
-        **Imagem → Segmentação → SolariaDepth**
+        **Imagem → Segmentação → Profundidade → Nuvem de pontos 3D**
 
         A profundidade é estimada pela rede neural
         própria da Solaria3D.
         """
     )
 
+
+    # ========================================================
+    # ENTRADA
+    # ========================================================
+
     imagem = gr.Image(
         type="pil",
         label="Imagem 2D"
     )
 
+
     botao = gr.Button(
         "Processar imagem",
         variant="primary"
     )
+
+
+    # ========================================================
+    # RESULTADOS 2D
+    # ========================================================
 
     with gr.Row():
 
@@ -155,10 +223,36 @@ with gr.Blocks(
             label="2 — Mapa de profundidade"
         )
 
+
+    # ========================================================
+    # RESULTADO 3D
+    # ========================================================
+
+    modelo_3d = gr.Model3D(
+        label="3 — Nuvem de pontos 3D",
+        display_mode="point_cloud",
+        height=600,
+        camera_position=(
+            45,
+            25,
+            3
+        )
+    )
+
+
+    # ========================================================
+    # STATUS
+    # ========================================================
+
     status = gr.Textbox(
         label="Status",
         interactive=False
     )
+
+
+    # ========================================================
+    # EVENTO
+    # ========================================================
 
     botao.click(
         fn=processar,
@@ -166,6 +260,7 @@ with gr.Blocks(
         outputs=[
             objeto,
             mapa_depth,
+            modelo_3d,
             status
         ]
     )
