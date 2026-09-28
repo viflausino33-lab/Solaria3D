@@ -37,20 +37,82 @@ DEVICE = (
 
 BATCH_SIZE = 2
 
-EPOCHS = 1
+EPOCHS = 10
 
 LEARNING_RATE = 1e-4
 
-MAX_TRAIN_SAMPLES = 20
-
-MAX_VAL_SAMPLES = 5
-
-MODEL_DIR = "models"
-
-MODEL_PATH = os.path.join(
-    MODEL_DIR,
-    "solaria_depth_v1.pth"
+MODEL_DIR = os.path.join(
+    ROOT,
+    "models"
 )
+
+BEST_MODEL_PATH = os.path.join(
+    MODEL_DIR,
+    "solaria_depth_best.pth"
+)
+
+LAST_MODEL_PATH = os.path.join(
+    MODEL_DIR,
+    "solaria_depth_last.pth"
+)
+
+
+# ============================================================
+# LOSS
+# ============================================================
+
+def gradient_loss(predicao, alvo):
+    """
+    Compara os gradientes horizontais e verticais
+    da profundidade prevista e da profundidade real.
+
+    Isso ajuda a rede a aprender estruturas espaciais
+    e preservar transições de profundidade.
+    """
+
+    pred_x = predicao[:, :, :, 1:] - predicao[:, :, :, :-1]
+    alvo_x = alvo[:, :, :, 1:] - alvo[:, :, :, :-1]
+
+    pred_y = predicao[:, :, 1:, :] - predicao[:, :, :-1, :]
+    alvo_y = alvo[:, :, 1:, :] - alvo[:, :, :-1, :]
+
+    loss_x = torch.mean(
+        torch.abs(pred_x - alvo_x)
+    )
+
+    loss_y = torch.mean(
+        torch.abs(pred_y - alvo_y)
+    )
+
+    return loss_x + loss_y
+
+
+def calcular_loss(predicao, alvo):
+    """
+    Loss principal da SolariaDepth.
+
+    L1:
+        aproxima os valores de profundidade.
+
+    Gradient:
+        ajuda a preservar a estrutura espacial.
+    """
+
+    l1 = torch.mean(
+        torch.abs(predicao - alvo)
+    )
+
+    grad = gradient_loss(
+        predicao,
+        alvo
+    )
+
+    loss = (
+        l1 +
+        0.5 * grad
+    )
+
+    return loss, l1, grad
 
 
 # ============================================================
@@ -65,11 +127,16 @@ print("========================================")
 print()
 print("Dispositivo:", DEVICE)
 
+print("Batch size:", BATCH_SIZE)
+print("Épocas:", EPOCHS)
+print("Learning rate:", LEARNING_RATE)
 
 if DEVICE == "cpu":
 
     print()
-    print("AVISO: treinamento será executado na CPU.")
+    print(
+        "AVISO: treinamento será executado na CPU."
+    )
 
 
 # ============================================================
@@ -88,35 +155,7 @@ val_dataset = SolariaDepthDataset(
 )
 
 
-# Limita a quantidade somente para o primeiro teste
-if MAX_TRAIN_SAMPLES is not None:
-
-    train_dataset.dataset = (
-        train_dataset.dataset.select(
-            range(
-                min(
-                    MAX_TRAIN_SAMPLES,
-                    len(train_dataset)
-                )
-            )
-        )
-    )
-
-
-if MAX_VAL_SAMPLES is not None:
-
-    val_dataset.dataset = (
-        val_dataset.dataset.select(
-            range(
-                min(
-                    MAX_VAL_SAMPLES,
-                    len(val_dataset)
-                )
-            )
-        )
-    )
-
-
+print()
 print(
     "Treino:",
     len(train_dataset)
@@ -174,13 +213,6 @@ print(
 
 
 # ============================================================
-# LOSS
-# ============================================================
-
-criterion = nn.L1Loss()
-
-
-# ============================================================
 # OTIMIZADOR
 # ============================================================
 
@@ -201,19 +233,51 @@ os.makedirs(
 
 
 # ============================================================
+# HISTÓRICO
+# ============================================================
+
+historico = []
+
+melhor_val_loss = float(
+    "inf"
+)
+
+
+# ============================================================
 # TREINAMENTO
 # ============================================================
 
 for epoch in range(EPOCHS):
 
+    print()
+    print(
+        "========================================"
+    )
+
+    print(
+        f"ÉPOCA {epoch + 1}/{EPOCHS}"
+    )
+
+    print(
+        "========================================"
+    )
+
+
+    # ========================================================
+    # TREINO
+    # ========================================================
+
     model.train()
 
     total_loss = 0.0
+    total_l1 = 0.0
+    total_grad = 0.0
 
     barra = tqdm(
         train_loader,
-        desc=f"Epoch {epoch + 1}/{EPOCHS}"
+        desc=f"Treino {epoch + 1}/{EPOCHS}"
     )
+
 
     for imagens, depths in barra:
 
@@ -225,30 +289,51 @@ for epoch in range(EPOCHS):
             DEVICE
         )
 
+
         optimizer.zero_grad()
+
 
         previsao = model(
             imagens
         )
 
-        loss = criterion(
+
+        loss, l1, grad = calcular_loss(
             previsao,
             depths
         )
 
+
         loss.backward()
+
 
         optimizer.step()
 
+
         total_loss += loss.item()
+        total_l1 += l1.item()
+        total_grad += grad.item()
+
 
         barra.set_postfix(
-            loss=f"{loss.item():.6f}"
+            loss=f"{loss.item():.5f}",
+            l1=f"{l1.item():.5f}",
+            grad=f"{grad.item():.5f}"
         )
 
 
     train_loss = (
         total_loss /
+        len(train_loader)
+    )
+
+    train_l1 = (
+        total_l1 /
+        len(train_loader)
+    )
+
+    train_grad = (
+        total_grad /
         len(train_loader)
     )
 
@@ -260,6 +345,9 @@ for epoch in range(EPOCHS):
     model.eval()
 
     total_val_loss = 0.0
+    total_val_l1 = 0.0
+    total_val_grad = 0.0
+
 
     with torch.no_grad():
 
@@ -273,16 +361,21 @@ for epoch in range(EPOCHS):
                 DEVICE
             )
 
+
             previsao = model(
                 imagens
             )
 
-            loss = criterion(
+
+            loss, l1, grad = calcular_loss(
                 previsao,
                 depths
             )
 
+
             total_val_loss += loss.item()
+            total_val_l1 += l1.item()
+            total_val_grad += grad.item()
 
 
     val_loss = (
@@ -290,10 +383,42 @@ for epoch in range(EPOCHS):
         len(val_loader)
     )
 
+    val_l1 = (
+        total_val_l1 /
+        len(val_loader)
+    )
+
+    val_grad = (
+        total_val_grad /
+        len(val_loader)
+    )
+
+
+    # ========================================================
+    # HISTÓRICO
+    # ========================================================
+
+    historico.append(
+        {
+            "epoch": epoch + 1,
+            "train_loss": train_loss,
+            "train_l1": train_l1,
+            "train_grad": train_grad,
+            "val_loss": val_loss,
+            "val_l1": val_l1,
+            "val_grad": val_grad,
+        }
+    )
+
+
+    # ========================================================
+    # RESULTADOS
+    # ========================================================
 
     print()
+
     print(
-        f"Epoch {epoch + 1}"
+        f"Epoch {epoch + 1}/{EPOCHS}"
     )
 
     print(
@@ -301,28 +426,136 @@ for epoch in range(EPOCHS):
     )
 
     print(
-        f"Val Loss: {val_loss:.6f}"
+        f"Train L1:   {train_l1:.6f}"
+    )
+
+    print(
+        f"Train Grad: {train_grad:.6f}"
+    )
+
+    print()
+
+    print(
+        f"Val Loss:   {val_loss:.6f}"
+    )
+
+    print(
+        f"Val L1:     {val_l1:.6f}"
+    )
+
+    print(
+        f"Val Grad:   {val_grad:.6f}"
     )
 
 
-# ============================================================
-# SALVAR
-# ============================================================
+    # ========================================================
+    # SALVAR ÚLTIMO MODELO
+    # ========================================================
 
-torch.save(
-    {
-        "model_state_dict": model.state_dict(),
-        "epoch": EPOCHS,
-        "train_loss": train_loss,
-        "val_loss": val_loss,
-    },
-    MODEL_PATH
-)
+    checkpoint = {
 
+        "model_state_dict":
+            model.state_dict(),
+
+        "optimizer_state_dict":
+            optimizer.state_dict(),
+
+        "epoch":
+            epoch + 1,
+
+        "train_loss":
+            train_loss,
+
+        "val_loss":
+            val_loss,
+
+        "train_l1":
+            train_l1,
+
+        "train_grad":
+            train_grad,
+
+        "val_l1":
+            val_l1,
+
+        "val_grad":
+            val_grad,
+
+        "historico":
+            historico,
+    }
+
+
+    torch.save(
+        checkpoint,
+        LAST_MODEL_PATH
+    )
+
+
+    # ========================================================
+    # SALVAR MELHOR MODELO
+    # ========================================================
+
+    if val_loss < melhor_val_loss:
+
+        melhor_val_loss = val_loss
+
+        torch.save(
+            checkpoint,
+            BEST_MODEL_PATH
+        )
+
+        print()
+        print(
+            "NOVO MELHOR MODELO!"
+        )
+
+        print(
+            "Val Loss:",
+            f"{val_loss:.6f}"
+        )
+
+        print(
+            "Salvo em:",
+            BEST_MODEL_PATH
+        )
+
+
+# ============================================================
+# FINAL
+# ============================================================
 
 print()
 print("========================================")
-print("Treinamento concluído.")
-print("Modelo salvo em:")
-print(MODEL_PATH)
+print("       TREINAMENTO CONCLUÍDO")
+print("========================================")
+
+print()
+
+print(
+    "Melhor Val Loss:",
+    f"{melhor_val_loss:.6f}"
+)
+
+print()
+
+print(
+    "Melhor modelo:"
+)
+
+print(
+    BEST_MODEL_PATH
+)
+
+print()
+
+print(
+    "Último modelo:"
+)
+
+print(
+    LAST_MODEL_PATH
+)
+
+print()
 print("========================================")
